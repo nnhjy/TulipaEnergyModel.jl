@@ -4,7 +4,11 @@
     model = JuMP.Model()
 
     table_name = "var_assets_investment"
-    table_rows = [(1, "battery", 2030, true, 50, 0, Inf), (2, "battery", 2050, true, 50, 0, Inf)]
+    table_rows = [
+        (1, "battery", 2030, true, 50, 0, Inf),
+        (2, "battery", 2040, true, 50, 0, Inf),
+        (3, "battery", 2050, true, 50, 0, Inf),
+    ]
     columns = [
         :id,
         :asset,
@@ -16,9 +20,14 @@
     ]
     _create_table_for_tests(connection, table_name, table_rows, columns)
 
-    # Units invested in 2030 and decommissioned in 2050
+    # The 2030 vintage can be decommissioned in both 2040 and 2050, so its limit must sum both
+    # decisions; the 2040 vintage can only be decommissioned in 2050
     table_name = "var_assets_decommission"
-    table_rows = [(1, "battery", 2050, 2030, true)]
+    table_rows = [
+        (1, "battery", 2040, 2030, true),
+        (2, "battery", 2050, 2030, true),
+        (3, "battery", 2050, 2040, true),
+    ]
     columns = [:id, :asset, :milestone_year, :commission_year, :investment_integer]
     _create_table_for_tests(connection, table_name, table_rows, columns)
 
@@ -65,7 +74,7 @@
     TulipaEnergyModel.add_decommission_variables!(model, variables)
 
     table_name = "cons_limit_decommission_assets"
-    table_rows = [(1, "battery", 2030)]
+    table_rows = [(1, "battery", 2030), (2, "battery", 2040)]
     columns = [:id, :asset, :commission_year]
     _create_table_for_tests(connection, table_name, table_rows, columns)
     _create_empty_table_for_tests(
@@ -93,7 +102,10 @@
     var_dec = variables[:assets_decommission].container
 
     @test _is_constraint_equal(
-        [JuMP.@build_constraint(var_inv[1] - var_dec[1] ≥ 0)],
+        [
+            JuMP.@build_constraint(var_inv[1] - var_dec[1] - var_dec[2] ≥ 0),
+            JuMP.@build_constraint(var_inv[2] - var_dec[3] ≥ 0),
+        ],
         _get_cons_object(model, :limit_decommission_assets),
     )
     @test isempty(_get_cons_object(model, :limit_decommission_storage_energy))
@@ -102,13 +114,14 @@ end
 
 @testsnippet LimitDecommissionSetup begin
     # Build the full model for the multi-year fixture, optionally overriding the technical lifetime
-    # of the battery (aggregated vintage method, investable and decommissionable in 2030 and 2050)
-    function _create_multi_year_problem(; battery_technical_lifetime = nothing)
+    # of some assets, e.g., the battery (aggregated vintage method) or the wind (compact profiles),
+    # both investable and decommissionable in 2030 and 2050
+    function _create_multi_year_problem(; technical_lifetimes = Dict{String,Int}())
         connection = _multi_year_fixture()
-        if battery_technical_lifetime !== nothing
+        for (asset, technical_lifetime) in technical_lifetimes
             DuckDB.query(
                 connection,
-                "UPDATE asset SET technical_lifetime = $battery_technical_lifetime WHERE asset = 'battery'",
+                "UPDATE asset SET technical_lifetime = $technical_lifetime WHERE asset = '$asset'",
             )
         end
         TulipaEnergyModel.populate_with_defaults!(connection)
@@ -186,11 +199,14 @@ end
     ) == [(2050, 2030)]
 
     # With a technical lifetime shorter than the gap between milestone years, the 2030 investment
-    # is not alive in 2050, so there is nothing to decommission
-    energy_problem = _create_multi_year_problem(; battery_technical_lifetime = 15)
+    # is not alive in 2050, so there is nothing to decommission. For the compact method, this
+    # holds even though asset_both still lists the 2030 vintage of wind in 2050
+    energy_problem =
+        _create_multi_year_problem(; technical_lifetimes = Dict("battery" => 15, "wind" => 15))
     connection = energy_problem.db_connection
     @test isempty(_rows(connection, "var_assets_decommission", "asset = 'battery'"))
     @test isempty(_rows(connection, "var_assets_decommission_energy", "asset = 'battery'"))
+    @test isempty(_rows(connection, "var_assets_decommission", "asset = 'wind'"))
 end
 
 @testitem "Available units expressions keep the initial units and subtract vintage decommissions" setup =
@@ -260,8 +276,9 @@ end
         JuMP.@expression(model, 0.02 + inv_wind_2030 - dec_wind),
     )
 
-    # Technical lifetime of 15 years: the 2030 investment is gone by 2050
-    energy_problem = _create_multi_year_problem(; battery_technical_lifetime = 15)
+    # Technical lifetime of 15 years: the 2030 investment is gone by 2050, for both vintage methods
+    energy_problem =
+        _create_multi_year_problem(; technical_lifetimes = Dict("battery" => 15, "wind" => 15))
     model = energy_problem.model
     inv(year) = _variable(
         energy_problem,
@@ -279,6 +296,15 @@ end
     )
     @test JuMP.isequal_canonical(avail(2030), JuMP.@expression(model, 1.09 + inv(2030)))
     @test JuMP.isequal_canonical(avail(2050), JuMP.@expression(model, 2.02 + inv(2050)))
+    avail_wind(year, vintage) = _expression(
+        energy_problem,
+        :available_asset_units_compact_vintage_method,
+        :assets;
+        asset = "wind",
+        milestone_year = year,
+        commission_year = vintage,
+    )
+    @test JuMP.isequal_canonical(avail_wind(2050, 2030), JuMP.AffExpr(0.02))
 end
 
 @testitem "Decommission limits bound each vintage by its investment" setup =

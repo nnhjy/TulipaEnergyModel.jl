@@ -266,10 +266,13 @@ function _create_multi_year_expressions_indices!(connection, expressions)
             FROM asset_both
             LEFT JOIN asset
                 ON asset_both.asset = asset.asset
+            -- As in the aggregated method, the investment and the decommissions of a vintage are
+            -- only part of the expression while the vintage is within its technical lifetime
             LEFT JOIN var_assets_decommission AS var_dec
                 ON asset_both.asset = var_dec.asset
                 AND asset_both.commission_year = var_dec.commission_year
                 AND asset_both.milestone_year >= var_dec.milestone_year
+                AND var_dec.commission_year + asset.technical_lifetime - 1 >= asset_both.milestone_year
             LEFT JOIN var_assets_investment AS var_inv
                 ON asset_both.asset = var_inv.asset
                 AND asset_both.commission_year = var_inv.milestone_year

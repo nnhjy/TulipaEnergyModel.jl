@@ -580,6 +580,7 @@ The existing units are given by the user and are not part of these constraints.
 
 The same rule applies to the compact methods: the decommissions of a vintage are bounded by the investment of that vintage, and the existing units of that vintage, $p^{\text{initial units}}_{a,y,v}$, are not decommissioned by the model.
 Since the investment and the initial units are non-negative, this also guarantees $v^{\text{available units compact}}_{a,y,v} \ge 0$.
+The set $\mathcal{D}^{\text{compact profiles}}$ and the variable $v^{\text{decom compact profiles}}_{a,y,v}$ are shared by the `compact_profiles` and `compact_efficiencies` methods, in the same way as the expression $v^{\text{available units compact}}_{a,y,v}$.
 
 ```math
 \begin{aligned}

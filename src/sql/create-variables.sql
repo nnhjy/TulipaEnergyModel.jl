@@ -488,9 +488,11 @@ drop table if exists var_assets_decommission
 -- given by the user for each milestone year and are never decommissioned by
 -- the model.
 -- For the compact methods, asset_both lists the vintages alive at each
--- milestone year. For the aggregated method, asset_both only has
--- milestone_year = commission_year rows, so the vintages within the technical
--- lifetime are derived from asset_milestone.
+-- milestone year, and the technical lifetime is checked again so that a
+-- vintage listed beyond its lifetime cannot be decommissioned. For the
+-- aggregated method, asset_both only has milestone_year = commission_year
+-- rows, so the vintages within the technical lifetime are derived from
+-- asset_milestone.
 create table var_assets_decommission as
 with
     compact_vintage_method as (
@@ -508,6 +510,7 @@ with
         where
             asset_both.decommissionable
             and asset_both.commission_year < asset_both.milestone_year
+            and asset_both.commission_year + asset.technical_lifetime - 1 >= asset_both.milestone_year
             and asset.type != 'consumer'
             and asset.vintage_method in ('compact_profiles', 'compact_efficiencies')
     ),

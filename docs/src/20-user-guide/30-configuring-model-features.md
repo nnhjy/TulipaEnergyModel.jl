@@ -142,7 +142,7 @@ You need to choose a `vintage_method` for the asset. The default is `aggregated`
 In addition, you control whether investment and decommissioning are allowed through separate parameters:
 
 - `investable` (in `asset-milestone.csv`): whether the model can invest in new units of this asset at a given milestone year.
-- `decommissionable` (in `asset-both.csv`): whether the units invested by the model in earlier milestone years can be decommissioned at a given milestone year. Existing units (`initial_units`) are never decommissioned by the model.
+- `decommissionable` (in `asset-both.csv`): whether the units invested by the model in earlier milestone years can be decommissioned at a given milestone year. Only units invested by the model can be decommissioned; existing units (`initial_units`) are never decommissioned by the model.
 
 Below is an overview of the important set-ups regarding the vintage methods.
 
@@ -342,7 +342,7 @@ Here we can see that the assets `Asgard_Solar` and `Midgard_Wind` belong to the 
 
 !!! info
     Assets in `use_only_investment_units` groups have to allow investment (`asset_milestone.investable = true` for the corresponding year) and must not be consumers (`asset.type != "consumer"`).
-    Assets in `use_available_units` groups may be non-investable, which allows limits on existing capacity and decommissioning trajectories.
+    Assets in `use_available_units` groups may be non-investable, which allows customised limits also accounting for existing capacity (`initial_units`).
     Assets in `use_available_units` groups may be have different `vintage_method`, i.e., they can be `aggregated` or `compact_profiles` and the group constraints will be applied accordingly.
 
 ## [Flow Coefficients](@id flow-coefficient)
