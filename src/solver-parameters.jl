@@ -104,7 +104,7 @@ Dict{String, Any} with 6 entries:
   "small_number"   => 1.0e-8
   "true_or_false"  => true
   "real_number1"   => 3.14
-  "big_number"     => 6.66e6
+  "big_number"     => 6.66E06
 ```
 """
 function read_parameters_from_file(filepath)
