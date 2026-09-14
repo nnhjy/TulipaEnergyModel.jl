@@ -93,18 +93,34 @@ println(io,
   \"\"\"
 )
 close(io)
+
 # Reading
-read_parameters_from_file(filepath)
+params = read_parameters_from_file(filepath)
 
+# Check parsed values explicitly
+params["true_or_false"]
 # output
+true
 
-Dict{String, Any} with 6 entries:
-  "string"         => "something"
-  "integer_number" => 5
-  "small_number"   => 1.0e-8
-  "true_or_false"  => true
-  "real_number1"   => 3.14
-  "big_number"     => 6.66E06
+params["integer_number"]
+# output
+5
+
+params["real_number1"]
+# output
+3.14
+
+params["big_number"]
+# output
+6.66e6
+
+params["small_number"]
+# output
+1.0e-8
+
+params["string"]
+# output
+"something"
 ```
 """
 function read_parameters_from_file(filepath)
