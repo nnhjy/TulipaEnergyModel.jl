@@ -121,7 +121,7 @@ params["small_number"]
 params["string"]
 # output
 "something"
-\n
+
 ```
 """
 function read_parameters_from_file(filepath)
