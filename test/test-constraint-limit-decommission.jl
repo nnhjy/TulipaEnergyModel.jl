@@ -96,7 +96,7 @@
         )
     )
 
-    TulipaEnergyModel.add_limit_decommission_constraints!(connection, model, variables, constraints)
+    add_limit_decommission_constraints!(connection, model, variables, constraints)
 
     var_inv = variables[:assets_investment].container
     var_dec = variables[:assets_decommission].container
