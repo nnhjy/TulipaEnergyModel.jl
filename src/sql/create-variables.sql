@@ -500,7 +500,9 @@ with
             asset_both.asset,
             asset_both.milestone_year,
             asset_both.commission_year,
+            asset_both.decommissionable,
             asset.investment_integer,
+            asset.capacity,
         from
             asset_both
             left join asset on asset.asset = asset_both.asset
@@ -519,7 +521,9 @@ with
             asset_both.asset,
             asset_both.milestone_year,
             asset_milestone.milestone_year as commission_year,
+            asset_both.decommissionable,
             asset.investment_integer,
+            asset.capacity,
         from
             asset_both
             left join asset on asset.asset = asset_both.asset
@@ -574,7 +578,9 @@ with
             flow.to_asset,
             flow_both.milestone_year,
             flow_milestone.milestone_year as commission_year,
+            flow_both.decommissionable,
             flow.investment_integer,
+            flow.capacity,
         from
             flow_both
             left join flow on flow.from_asset = flow_both.from_asset
@@ -650,7 +656,9 @@ with
             asset.asset,
             asset_both.milestone_year,
             asset_milestone.milestone_year as commission_year,
+            asset_both.decommissionable,
             asset.investment_integer_storage_energy,
+            asset.capacity_storage_energy,
         from
             asset_both
             left join asset on asset.asset = asset_both.asset

@@ -115,11 +115,13 @@ end
 @testsnippet LimitDecommissionSetup begin
     # Build the full model for the multi-year fixture, optionally overriding the technical lifetime
     # of some assets, e.g., the battery (aggregated vintage method) or the wind (compact profiles),
-    # both investable and decommissionable in 2030 and 2050.
+    # both investable and decommissionable in 2030 and 2050, or of some transport flows, e.g.,
+    # ccgt -> demand, investable and decommissionable in 2030 and 2050.
     # The ccgt (compact efficiencies) is neither investable nor decommissionable in the fixture;
     # `decommissionable_ccgt = true` makes its 2030 vintage investable and decommissionable in 2050
     function _create_multi_year_problem(;
         technical_lifetimes = Dict{String,Int}(),
+        flow_technical_lifetimes = Dict{Tuple{String,String},Int}(),
         decommissionable_ccgt = false,
     )
         connection = _multi_year_fixture()
@@ -127,6 +129,13 @@ end
             DuckDB.query(
                 connection,
                 "UPDATE asset SET technical_lifetime = $technical_lifetime WHERE asset = '$asset'",
+            )
+        end
+        for ((from_asset, to_asset), technical_lifetime) in flow_technical_lifetimes
+            DuckDB.query(
+                connection,
+                "UPDATE flow SET technical_lifetime = $technical_lifetime
+                WHERE from_asset = '$from_asset' AND to_asset = '$to_asset'",
             )
         end
         if decommissionable_ccgt
@@ -225,6 +234,72 @@ end
     @test isempty(_rows(connection, "var_assets_decommission", "asset = 'battery'"))
     @test isempty(_rows(connection, "var_assets_decommission_energy", "asset = 'battery'"))
     @test isempty(_rows(connection, "var_assets_decommission", "asset = 'wind'"))
+
+    # The same holds for the transport flow: the 2030 investment cannot be decommissioned in 2050
+    energy_problem =
+        _create_multi_year_problem(; flow_technical_lifetimes = Dict(("ccgt", "demand") => 15))
+    connection = energy_problem.db_connection
+    @test isempty(
+        _rows(connection, "var_flows_decommission", "from_asset = 'ccgt' AND to_asset = 'demand'"),
+    )
+end
+
+@testitem "Decommission variable tables keep the documented associated input parameters" setup =
+    [CommonSetup, LimitDecommissionSetup] tags = [:integration, :variable, :fast] begin
+    # The associated input parameters of each table are listed in docs/src/20-user-guide/55-outputs.md
+    energy_problem = _create_multi_year_problem()
+    connection = energy_problem.db_connection
+    _columns(table_name) =
+        [row.column_name for row in DuckDB.query(connection, "DESCRIBE $table_name")]
+    @test _columns("var_assets_decommission") == [
+        "id",
+        "asset",
+        "milestone_year",
+        "commission_year",
+        "decommissionable",
+        "investment_integer",
+        "capacity",
+        "solution",
+    ]
+    @test _columns("var_flows_decommission") == [
+        "id",
+        "from_asset",
+        "to_asset",
+        "milestone_year",
+        "commission_year",
+        "decommissionable",
+        "investment_integer",
+        "capacity",
+        "solution",
+    ]
+    @test _columns("var_assets_decommission_energy") == [
+        "id",
+        "asset",
+        "milestone_year",
+        "commission_year",
+        "decommissionable",
+        "investment_integer_storage_energy",
+        "capacity_storage_energy",
+        "solution",
+    ]
+    # The parameters take the values of the input tables of the decommissioned units
+    battery = only(
+        DuckDB.query(
+            connection,
+            "SELECT decommissionable, investment_integer, capacity FROM var_assets_decommission
+            WHERE asset = 'battery'",
+        ),
+    )
+    @test (battery.decommissionable, battery.investment_integer, battery.capacity) ==
+          (true, true, 50.0)
+    flow = only(
+        DuckDB.query(
+            connection,
+            "SELECT decommissionable, investment_integer, capacity FROM var_flows_decommission
+            WHERE from_asset = 'ccgt' AND to_asset = 'demand'",
+        ),
+    )
+    @test (flow.decommissionable, flow.investment_integer, flow.capacity) == (true, false, 100.0)
 end
 
 @testitem "Available units expressions keep the initial units and subtract vintage decommissions" setup =
@@ -448,6 +523,34 @@ end
                 milestone_year = 2050,
             ),
             JuMP.@expression(model, 0.0 + inv_flow + inv_flow_2050 - dec_flow),
+        )
+    end
+
+    # Technical lifetime of 15 years: the 2030 flow investment is gone by 2050, so there is no
+    # decommission limit and only the 2050 investment is available
+    energy_problem =
+        _create_multi_year_problem(; flow_technical_lifetimes = Dict(("ccgt", "demand") => 15))
+    model = energy_problem.model
+    @test isempty(_get_cons_object(model, :limit_decommission_flows))
+    inv_flow_2050 = _variable(
+        energy_problem,
+        "var_flows_investment",
+        :flows_investment;
+        from_asset = "ccgt",
+        to_asset = "demand",
+        milestone_year = 2050,
+    )
+    for direction in (:export, :import)
+        @test JuMP.isequal_canonical(
+            _expression(
+                energy_problem,
+                :available_flow_units_aggregated_vintage_method,
+                direction;
+                from_asset = "ccgt",
+                to_asset = "demand",
+                milestone_year = 2050,
+            ),
+            JuMP.@expression(model, 0.0 + inv_flow_2050),
         )
     end
 end
