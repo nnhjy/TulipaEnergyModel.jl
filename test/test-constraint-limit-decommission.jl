@@ -115,13 +115,31 @@ end
 @testsnippet LimitDecommissionSetup begin
     # Build the full model for the multi-year fixture, optionally overriding the technical lifetime
     # of some assets, e.g., the battery (aggregated vintage method) or the wind (compact profiles),
-    # both investable and decommissionable in 2030 and 2050
-    function _create_multi_year_problem(; technical_lifetimes = Dict{String,Int}())
+    # both investable and decommissionable in 2030 and 2050.
+    # The ccgt (compact efficiencies) is neither investable nor decommissionable in the fixture;
+    # `decommissionable_ccgt = true` makes its 2030 vintage investable and decommissionable in 2050
+    function _create_multi_year_problem(;
+        technical_lifetimes = Dict{String,Int}(),
+        decommissionable_ccgt = false,
+    )
         connection = _multi_year_fixture()
         for (asset, technical_lifetime) in technical_lifetimes
             DuckDB.query(
                 connection,
                 "UPDATE asset SET technical_lifetime = $technical_lifetime WHERE asset = '$asset'",
+            )
+        end
+        if decommissionable_ccgt
+            DuckDB.query(
+                connection,
+                "UPDATE asset_milestone SET investable = true
+                WHERE asset = 'ccgt' AND milestone_year = 2030;
+                UPDATE asset_both SET decommissionable = true
+                WHERE asset = 'ccgt' AND commission_year = 2030;
+                INSERT INTO asset_both
+                    (asset, milestone_year, commission_year, decommissionable, initial_units, initial_storage_units)
+                VALUES ('ccgt', 2050, 2030, true, 1.0, 0.0);
+                ",
             )
         end
         TulipaEnergyModel.populate_with_defaults!(connection)
@@ -432,4 +450,108 @@ end
             JuMP.@expression(model, 0.0 + inv_flow + inv_flow_2050 - dec_flow),
         )
     end
+end
+
+@testitem "Compact efficiencies decommissions follow the same vintage rules as compact profiles" setup =
+    [CommonSetup, LimitDecommissionSetup] tags = [:integration, :constraint, :fast] begin
+    energy_problem = _create_multi_year_problem(; decommissionable_ccgt = true)
+    connection = energy_problem.db_connection
+    model = energy_problem.model
+
+    # Ccgt (compact efficiencies, technical lifetime 25): the 2025 vintage is not investable, so
+    # only the 2030 investment can be decommissioned, and only in 2050
+    @test _rows(connection, "var_assets_decommission", "asset = 'ccgt'") == [(2050, 2030)]
+
+    inv_ccgt = _variable(
+        energy_problem,
+        "var_assets_investment",
+        :assets_investment;
+        asset = "ccgt",
+        milestone_year = 2030,
+    )
+    dec_ccgt = _variable(
+        energy_problem,
+        "var_assets_decommission",
+        :assets_decommission;
+        asset = "ccgt",
+        milestone_year = 2050,
+        commission_year = 2030,
+    )
+    avail_ccgt(year, vintage) = _expression(
+        energy_problem,
+        :available_asset_units_compact_vintage_method,
+        :assets;
+        asset = "ccgt",
+        milestone_year = year,
+        commission_year = vintage,
+    )
+    @test JuMP.isequal_canonical(avail_ccgt(2030, 2025), JuMP.AffExpr(1.0))
+    @test JuMP.isequal_canonical(avail_ccgt(2030, 2030), JuMP.@expression(model, 1.0 + inv_ccgt))
+    @test JuMP.isequal_canonical(
+        avail_ccgt(2050, 2030),
+        JuMP.@expression(model, 1.0 + inv_ccgt - dec_ccgt),
+    )
+    @test JuMP.isequal_canonical(avail_ccgt(2050, 2050), JuMP.AffExpr(1.0))
+
+    # The decommission limit of the ccgt vintage sits between the battery and the wind ones
+    inv_battery = _variable(
+        energy_problem,
+        "var_assets_investment",
+        :assets_investment;
+        asset = "battery",
+        milestone_year = 2030,
+    )
+    dec_battery = _variable(
+        energy_problem,
+        "var_assets_decommission",
+        :assets_decommission;
+        asset = "battery",
+        milestone_year = 2050,
+        commission_year = 2030,
+    )
+    inv_wind = _variable(
+        energy_problem,
+        "var_assets_investment",
+        :assets_investment;
+        asset = "wind",
+        milestone_year = 2030,
+    )
+    dec_wind = _variable(
+        energy_problem,
+        "var_assets_decommission",
+        :assets_decommission;
+        asset = "wind",
+        milestone_year = 2050,
+        commission_year = 2030,
+    )
+    @test _is_constraint_equal(
+        [
+            JuMP.@build_constraint(inv_battery - dec_battery ≥ 0),
+            JuMP.@build_constraint(inv_ccgt - dec_ccgt ≥ 0),
+            JuMP.@build_constraint(inv_wind - dec_wind ≥ 0),
+        ],
+        _get_cons_object(model, :limit_decommission_assets),
+    )
+
+    # Technical lifetime of 15 years: the 2030 investment is gone by 2050, so there is nothing to
+    # decommission and only the existing units of the vintage remain
+    energy_problem = _create_multi_year_problem(;
+        technical_lifetimes = Dict("ccgt" => 15),
+        decommissionable_ccgt = true,
+    )
+    connection = energy_problem.db_connection
+    @test isempty(_rows(connection, "var_assets_decommission", "asset = 'ccgt'"))
+    avail_ccgt(year, vintage) = _expression(
+        energy_problem,
+        :available_asset_units_compact_vintage_method,
+        :assets;
+        asset = "ccgt",
+        milestone_year = year,
+        commission_year = vintage,
+    )
+    @test JuMP.isequal_canonical(avail_ccgt(2050, 2030), JuMP.AffExpr(1.0))
+    @test [
+        row.asset for row in
+        DuckDB.query(connection, "SELECT asset FROM cons_limit_decommission_assets ORDER BY asset")
+    ] == ["battery", "wind"]
 end

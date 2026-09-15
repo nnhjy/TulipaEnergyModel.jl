@@ -571,7 +571,7 @@ The existing units are given by the user and are not part of these constraints.
 ```math
 \begin{aligned}
     v^{\text{inv}}_{a,v} - \sum_{i \in \{\mathcal{Y}: v < i \le v + p^{\text{technical lifetime}}_{a} - 1 \}} v^{\text{decom aggregated}}_{a,i,v} & \ge 0 \quad  \forall a \in \mathcal{A}^{\text{aggregated}}, \forall v \in \mathcal{Y}^{\text{i}}_a \\
-    v^{\text{inv energy}}_{a,v} - \sum_{i \in \{\mathcal{Y}: v < i \le v + p^{\text{technical lifetime}}_{a} - 1 \}} v^{\text{decom energy aggregated}}_{a,i,v} & \ge 0 \quad  \forall a \in \mathcal{A}^{\text{se}}_y, \forall v \in \mathcal{Y}^{\text{i}}_a \\
+    v^{\text{inv energy}}_{a,v} - \sum_{i \in \{\mathcal{Y}: v < i \le v + p^{\text{technical lifetime}}_{a} - 1 \}} v^{\text{decom energy aggregated}}_{a,i,v} & \ge 0 \quad  \forall a \in \mathcal{A}^{\text{se}}, \forall v \in \mathcal{Y}^{\text{i}}_a \\
     v^{\text{inv}}_{f,v} - \sum_{i \in \{\mathcal{Y}: v < i \le v + p^{\text{technical lifetime}}_{f} - 1 \}} v^{\text{decom aggregated}}_{f,i,v} & \ge 0 \quad  \forall f \in \mathcal{F}^{\text{t}}, \forall v \in \mathcal{Y}^{\text{i}}_f
 \end{aligned}
 ```
