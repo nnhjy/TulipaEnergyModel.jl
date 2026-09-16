@@ -84,27 +84,30 @@ The file is parsed as [TOML](https://toml.io), which is intuitive. See the examp
 filepath, io = mktemp()
 println(io,
   \"\"\"
+    string = "something"
     true_or_false = true
     integer_number = 5
     real_number1 = 3.14
     big_number = 6.66E06
     small_number = 1e-8
-    string = "something"
   \"\"\"
 )
 close(io)
+
 # Reading
-read_parameters_from_file(filepath)
+parameters = read_parameters_from_file(filepath)
+parameters == Dict(
+    "true_or_false" => true,
+    "integer_number" => 5,
+    "real_number1" => 3.14,
+    "big_number" => 6.66e6,
+    "small_number" => 1.0e-8,
+    "string" => "something",
+)
 
 # output
 
-Dict{String, Any} with 6 entries:
-  "string"         => "something"
-  "integer_number" => 5
-  "small_number"   => 1.0e-8
-  "true_or_false"  => true
-  "real_number1"   => 3.14
-  "big_number"     => 6.66e6
+true
 ```
 """
 function read_parameters_from_file(filepath)
