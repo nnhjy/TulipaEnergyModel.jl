@@ -105,7 +105,7 @@ parameters == Dict(
     "string" => "something",
 )
 
-params["string"]
+parameters["string"]
 # output
 "something"
 
