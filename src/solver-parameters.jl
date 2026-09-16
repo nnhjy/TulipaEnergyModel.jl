@@ -105,9 +105,7 @@ parameters == Dict(
     "string" => "something",
 )
 
-parameters["string"]
 # output
-"something"
 
 true
 ```
